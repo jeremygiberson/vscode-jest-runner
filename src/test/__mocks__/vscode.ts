@@ -58,6 +58,9 @@ class Window {
   get activeTextEditor(): TextEditor {
     return new TextEditor(new Document(new Uri('hi')));
   }
+  showWarningMessage<T extends string>(message: string, ...items: T[]): Thenable<T | undefined> {
+    return Promise.resolve(undefined);
+  }
 }
 
 const workspace = new Workspace();
