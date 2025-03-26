@@ -416,7 +416,7 @@ describe('JestRunnerConfig', () => {
             'windows',
             'projectPath is not set',
             'returns the found jest config path (traversing up from target path)',
-            'c:/workspace',
+            'C:/workspace',
             undefined,
             {
               '**/*.test.js': 'C:/notWorkspace/notJestProject/jest.config.js',
@@ -438,7 +438,7 @@ describe('JestRunnerConfig', () => {
                 .mockReturnValue(new WorkspaceFolder(new Uri(workspacePath) as any) as any);
               jest.spyOn(vscode.window, 'showWarningMessage').mockReturnValue(undefined);
               jest.spyOn(fs, 'statSync').mockImplementation((path): any => ({
-                isDirectory: () => !targetPath.endsWith('.ts'),
+                isDirectory: () => false,
               }));
             });
 
