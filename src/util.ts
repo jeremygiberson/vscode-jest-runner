@@ -2,6 +2,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import * as mm from 'micromatch';
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 
 export function getDirName(filePath: string): string {
   return path.dirname(filePath);
@@ -136,4 +137,40 @@ export function resolveConfigPathOrMapping(
   }
 
   return undefined;
+}
+
+/**
+ * Traverse from starting path to and including ancestor path calling the callback function with each path.
+ * If the callback function returns a non-falsy value, the traversal will stop and the value will be returned.
+ * Returns false if the traversal completes without the callback returning a non-false value.
+ * @param ancestorPath
+ * @param startingPath
+ * @param callback <T>(currentFolderPath: string) => false | T
+ */
+export function searchPathToParent<T>(
+  startingPath: string,
+  ancestorPath: string,
+  callback: (currentFolderPath: string) => false | undefined | null | 0 | T,
+) {
+  let currentFolderPath = fs.statSync(startingPath).isDirectory() ? startingPath : path.dirname(startingPath);
+  const endPath = path.dirname(ancestorPath);
+  const resolvedStart = path.resolve(currentFolderPath);
+  const resolvedEnd = path.resolve(endPath);
+  // this might occur if you've opened a file outside of the workspace
+  if (!resolvedStart.startsWith(resolvedEnd)) {
+    return false;
+  }
+
+  // prevent edge case of workdir at root path ie, '/' -> '..' -> '/'
+  let lastPath: null | string = null;
+  do {
+    const result = callback(currentFolderPath);
+    if (result) {
+      return result;
+    }
+    lastPath = currentFolderPath;
+    currentFolderPath = path.dirname(currentFolderPath);
+  } while (currentFolderPath !== endPath && currentFolderPath !== lastPath);
+
+  return false;
 }

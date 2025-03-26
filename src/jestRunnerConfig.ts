@@ -8,6 +8,7 @@ import {
   CodeLensOption,
   isNodeExecuteAbleFile,
   resolveConfigPathOrMapping,
+  searchPathToParent,
 } from './util';
 
 export class JestRunnerConfig {
@@ -66,21 +67,22 @@ export class JestRunnerConfig {
     }
   }
 
-  private get currentPackagePath() {
-    let currentFolderPath: string = path.dirname(vscode.window.activeTextEditor.document.fileName);
-    do {
-      // Try to find where jest is installed relatively to the current opened file.
-      // Do not assume that jest is always installed at the root of the opened project, this is not the case
-      // such as in multi-module projects.
-      const pkg = path.join(currentFolderPath, 'package.json');
-      const jest = path.join(currentFolderPath, 'node_modules', 'jest');
-      if (fs.existsSync(pkg) && fs.existsSync(jest)) {
-        return currentFolderPath;
-      }
-      currentFolderPath = path.join(currentFolderPath, '..');
-    } while (currentFolderPath !== this.currentWorkspaceFolderPath);
-
-    return '';
+  public get currentPackagePath() {
+    const foundPath = searchPathToParent<string>(
+      path.dirname(vscode.window.activeTextEditor.document.uri.fsPath),
+      this.currentWorkspaceFolderPath,
+      (currentFolderPath: string) => {
+        // Try to find where jest is installed relatively to the current opened file.
+        // Do not assume that jest is always installed at the root of the opened project, this is not the case
+        // such as in multi-module projects.
+        const pkg = path.join(currentFolderPath, 'package.json');
+        const jest = path.join(currentFolderPath, 'node_modules', 'jest');
+        if (fs.existsSync(pkg) && fs.existsSync(jest)) {
+          return currentFolderPath;
+        }
+      },
+    );
+    return foundPath || '';
   }
 
   private get currentWorkspaceFolderPath(): string {
@@ -103,26 +105,27 @@ export class JestRunnerConfig {
     return normalizePath(path.resolve(this.currentWorkspaceFolderPath, this.projectPathFromConfig || '', configPath));
   }
 
-  private findConfigPath(targetPath?: string): string {
-    let currentFolderPath: string = targetPath || path.dirname(vscode.window.activeTextEditor.document.fileName);
-    let currentFolderConfigPath: string;
-    do {
-      for (const configFilename of [
-        'jest.config.js',
-        'jest.config.ts',
-        'jest.config.cjs',
-        'jest.config.mjs',
-        'jest.config.json',
-      ]) {
-        currentFolderConfigPath = path.join(currentFolderPath, configFilename);
+  public findConfigPath(targetPath?: string): string {
+    const foundPath = searchPathToParent<string>(
+      targetPath || path.dirname(vscode.window.activeTextEditor.document.uri.fsPath),
+      this.currentWorkspaceFolderPath,
+      (currentFolderPath: string) => {
+        for (const configFilename of [
+          'jest.config.js',
+          'jest.config.ts',
+          'jest.config.cjs',
+          'jest.config.mjs',
+          'jest.config.json',
+        ]) {
+          const currentFolderConfigPath = path.join(currentFolderPath, configFilename);
 
-        if (fs.existsSync(currentFolderConfigPath)) {
-          return currentFolderConfigPath;
+          if (fs.existsSync(currentFolderConfigPath)) {
+            return currentFolderConfigPath;
+          }
         }
-      }
-      currentFolderPath = path.join(currentFolderPath, '..');
-    } while (currentFolderPath !== this.currentWorkspaceFolderPath);
-    return '';
+      },
+    );
+    return foundPath || '';
   }
 
   public get runOptions(): string[] | null {

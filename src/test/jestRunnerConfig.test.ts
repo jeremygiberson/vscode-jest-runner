@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { JestRunnerConfig } from '../jestRunnerConfig';
-import { Uri, WorkspaceConfiguration, WorkspaceFolder } from './__mocks__/vscode';
+import { Document, TextEditor, Uri, WorkspaceConfiguration, WorkspaceFolder } from './__mocks__/vscode';
 import { isWindows } from '../util';
 import * as fs from 'fs';
+import * as path from 'path';
 
 const describes = {
   windows: isWindows() ? describe : describe.skip,
@@ -435,8 +436,10 @@ describe('JestRunnerConfig', () => {
               jest
                 .spyOn(vscode.workspace, 'getWorkspaceFolder')
                 .mockReturnValue(new WorkspaceFolder(new Uri(workspacePath) as any) as any);
-
               jest.spyOn(vscode.window, 'showWarningMessage').mockReturnValue(undefined);
+              jest.spyOn(fs, 'statSync').mockImplementation((path): any => ({
+                isDirectory: () => !targetPath.endsWith('.ts'),
+              }));
             });
 
             its[_os](behavior, async () => {
@@ -453,6 +456,303 @@ describe('JestRunnerConfig', () => {
           },
         );
       });
+    });
+  });
+
+  describe('currentPackagePath', () => {
+    const scenarios: Array<
+      [
+        os: 'windows' | 'linux',
+        name: string,
+        behavior: string,
+        workspacePath: string,
+        openedFilePath: string,
+        installedPath: string | undefined,
+      ]
+    > = [
+      [
+        'linux',
+        'jest dep installed in same path as the opened file',
+        'returns the folder path of the opened file',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/index.test.js',
+        '/home/user/workspace/jestProject',
+      ],
+      [
+        'linux',
+        'jest dep installed in parent path of the opened file',
+        'returns the folder path of the parent of the opened file',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/src/index.test.js',
+        '/home/user/workspace/jestProject',
+      ],
+      [
+        'linux',
+        'jest dep installed in an ancestor path of the opened file',
+        'returns the folder path of the ancestor of the opened file',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/deeply/nested/package/src/index.test.js',
+        '/home/user/workspace/jestProject',
+      ],
+      [
+        'linux',
+        'jest dep installed in the workspace of the opened file',
+        "returns the folder path of the opened file's workspace",
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/deeply/nested/package/src/index.test.js',
+        '/home/user/workspace',
+      ],
+      [
+        'linux',
+        'jest dep not installed',
+        'returns empty string',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/deeply/nested/package/src/index.test.js',
+        undefined,
+      ],
+      // windows
+      [
+        'windows',
+        'jest dep installed in same path as the opened file',
+        'returns the folder path of the opened file',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        'C:\\workspace\\jestProject\\src',
+      ],
+      [
+        'windows',
+        'jest dep installed in parent path of the opened file',
+        'returns the folder path of the parent of the opened file',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        'C:\\workspace\\jestProject',
+      ],
+      [
+        'windows',
+        'jest dep installed in an ancestor path of the opened file',
+        'returns the folder path of the ancestor of the opened file',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\deeply\\nested\\package\\src\\index.it.spec.js',
+        'C:\\workspace\\jestProject',
+      ],
+      [
+        'windows',
+        'jest dep installed in the workspace of the opened file',
+        "returns the folder path of the opened file's workspace",
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        'C:\\workspace',
+      ],
+      [
+        'windows',
+        'jest dep not installed',
+        'returns empty string',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        undefined,
+      ],
+    ];
+
+    describe.each(scenarios)('%s: %s', (_os, _name, behavior, workspacePath, openedFilePath, installedPath) => {
+      let jestRunnerConfig: JestRunnerConfig;
+      let packagePath: string;
+      let modulePath: string;
+
+      beforeEach(() => {
+        jestRunnerConfig = new JestRunnerConfig();
+        packagePath = installedPath ? path.resolve(installedPath, 'package.json') : '';
+        modulePath = installedPath ? path.resolve(installedPath, 'node_modules', 'jest') : '';
+        jest
+          .spyOn(vscode.workspace, 'getWorkspaceFolder')
+          .mockReturnValue(new WorkspaceFolder(new Uri(workspacePath) as any) as any);
+        jest
+          .spyOn(vscode.window, 'activeTextEditor', 'get')
+          .mockReturnValue(new TextEditor(new Document(new Uri(openedFilePath))) as any);
+        jest.spyOn(fs, 'statSync').mockImplementation((path): any => ({
+          isDirectory: () => !openedFilePath.endsWith('.ts'),
+        }));
+        jest
+          .spyOn(fs, 'existsSync')
+          .mockImplementation((filePath) => filePath === packagePath || filePath === modulePath);
+      });
+
+      its[_os](behavior, async () => {
+        if (installedPath) {
+          expect(jestRunnerConfig.currentPackagePath).toBe(installedPath);
+        } else {
+          expect(jestRunnerConfig.currentPackagePath).toBe('');
+        }
+      });
+    });
+  });
+  describe('findConfigPath', () => {
+    const scenarios: Array<
+      [
+        os: 'windows' | 'linux',
+        name: string,
+        behavior: string,
+        workspacePath: string,
+        openedFilePath: string,
+        configPath: string | undefined,
+        configFileName: string | undefined,
+      ]
+    > = [
+      [
+        'linux',
+        'jest config located in same path as the opened file',
+        'returns the filename path of the found config file',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/index.test.js',
+        '/home/user/workspace/jestProject',
+        'jest.config.cjs',
+      ],
+      [
+        'linux',
+        'jest config located in parent path of the opened file',
+        'returns the filename path of the found config file',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/src/index.test.js',
+        '/home/user/workspace/jestProject',
+        'jest.config.json',
+      ],
+      [
+        'linux',
+        'jest config located in an ancestor path of the opened file',
+        'returns the filename path of the found config file',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/deeply/nested/package/src/index.test.js',
+        '/home/user/workspace/jestProject',
+        'jest.config.js',
+      ],
+      [
+        'linux',
+        'jest config located in the workspace of the opened file',
+        'returns the filename path of the found config file',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/deeply/nested/package/src/index.test.js',
+        '/home/user/workspace',
+        'jest.config.ts',
+      ],
+      [
+        'linux',
+        'jest config not located',
+        'returns empty string',
+        '/home/user/workspace',
+        '/home/user/workspace/jestProject/deeply/nested/package/src/index.test.js',
+        undefined,
+        undefined,
+      ],
+      // windows
+      [
+        'windows',
+        'jest config located in same path as the opened file',
+        'returns the folder path of the opened file',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        'C:\\workspace\\jestProject\\src',
+        'jest.config.cjs',
+      ],
+      [
+        'windows',
+        'jest config located in parent path of the opened file',
+        'returns the folder path of the parent of the opened file',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        'C:\\workspace\\jestProject',
+        'jest.config.json',
+      ],
+      [
+        'windows',
+        'jest config located in an ancestor path of the opened file',
+        'returns the folder path of the ancestor of the opened file',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\deeply\\nested\\package\\src\\index.it.spec.js',
+        'C:\\workspace\\jestProject',
+        'jest.config.js',
+      ],
+      [
+        'windows',
+        'jest config located in the workspace of the opened file',
+        "returns the folder path of the opened file's workspace",
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        'C:\\workspace',
+        'jest.config.ts',
+      ],
+      [
+        'windows',
+        'jest config not located',
+        'returns empty string',
+        'C:\\workspace',
+        'C:\\workspace\\jestProject\\src\\index.it.spec.js',
+        undefined,
+        undefined,
+      ],
+    ];
+
+    describe('targetPath is not provided', () => {
+      describe.each(scenarios)(
+        '%s: %s',
+        (_os, _name, behavior, workspacePath, openedFilePath, configPath, configFilename) => {
+          let jestRunnerConfig: JestRunnerConfig;
+          let configFilePath: string;
+          let activeTextEditorSpy: jest.SpyInstance;
+
+          beforeEach(() => {
+            jestRunnerConfig = new JestRunnerConfig();
+            configFilePath = configPath && configFilename ? path.resolve(configPath, configFilename) : '';
+            jest
+              .spyOn(vscode.workspace, 'getWorkspaceFolder')
+              .mockReturnValue(new WorkspaceFolder(new Uri(workspacePath) as any) as any);
+            activeTextEditorSpy = jest
+              .spyOn(vscode.window, 'activeTextEditor', 'get')
+              .mockReturnValue(new TextEditor(new Document(new Uri(openedFilePath))) as any);
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath) => filePath === configFilePath);
+            jest.spyOn(fs, 'statSync').mockImplementation((path): any => ({
+              isDirectory: () => !openedFilePath.endsWith('.ts'),
+            }));
+          });
+
+          its[_os](behavior, async () => {
+            if (configPath) {
+              expect(jestRunnerConfig.findConfigPath()).toBe(configFilePath);
+            } else {
+              expect(jestRunnerConfig.findConfigPath()).toBe('');
+            }
+            expect(activeTextEditorSpy).toBeCalled();
+          });
+        },
+      );
+    });
+    describe('targetPath is provided', () => {
+      describe.each(scenarios)(
+        '%s: %s',
+        (_os, _name, behavior, workspacePath, openedFilePath, configPath, configFilename) => {
+          let jestRunnerConfig: JestRunnerConfig;
+          let configFilePath: string;
+
+          beforeEach(() => {
+            jestRunnerConfig = new JestRunnerConfig();
+            configFilePath = configPath && configFilename ? path.resolve(configPath, configFilename) : '';
+            jest.spyOn(vscode.window, 'activeTextEditor', 'get');
+            jest
+              .spyOn(vscode.workspace, 'getWorkspaceFolder')
+              .mockReturnValue(new WorkspaceFolder(new Uri(workspacePath) as any) as any);
+            jest.spyOn(fs, 'existsSync').mockImplementation((filePath) => filePath === configFilePath);
+            jest.spyOn(fs, 'statSync').mockImplementation((path): any => ({
+              isDirectory: () => !openedFilePath.endsWith('.ts'),
+            }));
+          });
+
+          its[_os](behavior, async () => {
+            if (configPath) {
+              expect(jestRunnerConfig.findConfigPath(openedFilePath)).toBe(configFilePath);
+            } else {
+              expect(jestRunnerConfig.findConfigPath(openedFilePath)).toBe('');
+            }
+          });
+        },
+      );
     });
   });
 });
