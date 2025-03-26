@@ -126,7 +126,8 @@ export function resolveConfigPathOrMapping(
   }
   for (const [key, value] of Object.entries(configPathOrMapping as Record<string, string>)) {
     const isMatch = mm.matcher(key);
-    if (isMatch(targetPath)) {
+    // try the glob against normalized and non-normalized path
+    if (isMatch(targetPath) || isMatch(normalizePath(targetPath))) {
       return value;
     }
   }
