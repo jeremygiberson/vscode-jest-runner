@@ -157,6 +157,7 @@ export function searchPathToParent<T>(
   const endPath = path.dirname(ancestorPath);
   const resolvedStart = path.resolve(currentFolderPath);
   const resolvedEnd = path.resolve(endPath);
+  console.log(JSON.stringify({ startingPath, ancestorPath, endPath, resolvedStart, resolvedEnd }));
   // this might occur if you've opened a file outside of the workspace
   if (!resolvedStart.startsWith(resolvedEnd)) {
     return false;

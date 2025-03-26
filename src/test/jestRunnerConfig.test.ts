@@ -437,8 +437,8 @@ describe('JestRunnerConfig', () => {
                 .spyOn(vscode.workspace, 'getWorkspaceFolder')
                 .mockReturnValue(new WorkspaceFolder(new Uri(workspacePath) as any) as any);
               jest.spyOn(vscode.window, 'showWarningMessage').mockReturnValue(undefined);
-              jest.spyOn(fs, 'statSync').mockImplementation((path): any => ({
-                isDirectory: () => false,
+              jest.spyOn(fs, 'statSync').mockImplementation((path: string): any => ({
+                isDirectory: () => /\.[a-z]{2,4}$/.test(path),
               }));
             });
 
